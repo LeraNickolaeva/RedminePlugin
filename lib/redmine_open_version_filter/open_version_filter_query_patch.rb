@@ -14,13 +14,25 @@ module OpenVersionFilterQueryPatch
     # add filters
     def available_filters_with_open_version_filter
       filters = available_filters_without_open_version_filter
-
       filters.merge!('from_versions_open_version_filter' =>
         {
           :name => l('field_in_opened_versions'),
           :order => 1,
           :values => [[l(:in_opened_versions), :in_opened_versions], [l(:out_of_opened_versions), :out_of_opened_versions]],
         })
+
+      if self.type == "TimeEntryQuery"
+        project_name = Project.where(id: self.project_id).first.name
+        version_name = Version.where(project_id: self.project_id).pluck(:name)
+        name_for_select = version_name.map! { |version_name| version_name = "#{project_name} - " + version_name }
+        filters.merge!('fixed_version_id' =>
+          {
+            :name => l('field_version'),
+            :order => 1,
+            :type => :list_optional,
+            :values => name_for_select,
+          })
+      end
     end
 
     def sql_for_from_versions_open_version_filter_field(field, operator, value)
