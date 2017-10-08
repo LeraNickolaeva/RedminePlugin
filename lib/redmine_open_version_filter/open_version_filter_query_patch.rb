@@ -51,8 +51,9 @@ module OpenVersionFilterQueryPatch
         if self.type == "IssueQuery"
           "(#{Issue.table_name}.fixed_version_id IN (#{version_ids.join(',')}))"
         else
-        #   # Issue.where(id: TimeEntry.pluck(:issue_id)).where(fixed_version_id: [version_ids])
-          "(#{Issue.table_name}.where(id: #{TimeEntry.table_name}.pluck(issue_id)).fixed_version_id IN (#{version_ids.join(',')}))"
+          open_version_ids = Version.where(project_id: project.id).where(status: "open").pluck(:id)
+          issue_ids = Issue.where(fixed_version_id: open_version_ids).pluck(:id)
+          issue_ids.map{ |issue_ids| "(#{TimeEntry.table_name}.issue_id = #{issue_ids})" }   
         end
       elsif value == ['out_of_opened_versions']
         version_ids = scope.open.visible.all(:conditions => 'effective_date IS NULL').collect(&:id).push(0)
@@ -60,7 +61,9 @@ module OpenVersionFilterQueryPatch
         if self.type == "IssueQuery"
           "(#{Issue.table_name}.fixed_version_id IN (#{version_ids.join(',')}) OR #{Issue.table_name}.fixed_version_id IS NULL)"
         else
-          "(#{Issue.table_name}.where(id: #{TimeEntry.table_name}.pluck(issue_id)).fixed_version_id IN (#{version_ids.join(',')}) OR #{Issue.table_name}.where(id: #{TimeEntry.table_name}.pluck(issue_id)).fixed_version_id IS NULL)"
+          close_version_ids = Version.where(project_id: project.id).where('status != ?', "open").pluck(:id)
+          issue_ids = (Issue.where(fixed_version_id: close_version_ids) && Issue.where(fixed_version_id: nil)).pluck(:id)
+          issue_ids.map{ |issue_ids| "(#{TimeEntry.table_name}.issue_id = #{issue_ids})" }
         end
       end
 
