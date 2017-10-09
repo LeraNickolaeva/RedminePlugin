@@ -21,21 +21,14 @@ module TimeEntryQueryPatch
           :order => 1,
           :values => [[l(:in_opened_versions), :in_opened_versions], [l(:out_of_opened_versions), :out_of_opened_versions]],
         })
+ 
+      versions = project.shared_versions.all
 
-      if self.type != "IssueQuery"
-        project_name = Project.where(id: self.project_id).first.name
-        version_name = Version.where(project_id: self.project_id).pluck(:name)
-        name_for_select = version_name.map! { |version_name| version_name = "#{project_name} - " + version_name }
-        filters.merge!('fixed_version_id' =>
-          {
-            :name => l('field_version'),
-            :order => 1,
-            :type => :list_optional,
-            :values => name_for_select,
-          })
-      else
-        filters
-      end
+      add_available_filter "fixed_version_id",
+        :name => l('field_fixed_version'),
+        :type => :list_optional,
+        :values => versions.sort.collect{|s| ["#{s.project.name} - #{s.name}", s.id.to_s] }
+        
     end
 
     def sql_for_from_versions_open_version_filter_field(field, operator, value)
@@ -56,7 +49,15 @@ module TimeEntryQueryPatch
         close_version_ids = Version.where(project_id: project.id).where('status != ?', "open").pluck(:id)
         issue_ids = (Issue.where(fixed_version_id: close_version_ids) && Issue.where(fixed_version_id: nil)).pluck(:id)
         issue_ids.map{ |issue_ids| "(#{TimeEntry.table_name}.issue_id = #{issue_ids})" }
-        end
+      end
+    end
+
+    def sql_for_fixed_version_id_field(field, operator, value)
+      if Issue.where(fixed_version_id: value[0].to_i).present?
+        issue_ids = Issue.where(fixed_version_id: value[0].to_i).pluck(:id)
+        issue_ids.map{ |issue_ids| "(#{TimeEntry.table_name}.issue_id = #{issue_ids})" }
+      else
+        "(#{TimeEntry.table_name}.issue_id IS NULL)"
       end
     end
   end
