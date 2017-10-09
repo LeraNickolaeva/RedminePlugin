@@ -39,25 +39,30 @@ module TimeEntryQueryPatch
         scope = scope.where(id: all_shared_version_ids)
       end
       if value == ["in_opened_versions"]
-        version_ids = scope.open.visible.all(:conditions => 'effective_date IS NOT NULL').collect(&:id).push(0)
-        open_version_ids = Version.where(project_id: project.id).where(status: "open").pluck(:id)
-        issue_ids = Issue.where(fixed_version_id: open_version_ids).pluck(:id)
-        issue_ids.map{ |issue_ids| "(#{TimeEntry.table_name}.issue_id = #{issue_ids})" }   
+        version_ids = scope.open.where(project_id: project.id).visible.all(:conditions => 'effective_date IS NOT NULL').collect(&:id)
+        if version_ids.present?
+          issue_ids = Issue.where(fixed_version_id: version_ids).pluck(:id)
+          "(#{TimeEntry.table_name}.issue_id IN (#{issue_ids.join(',')}))"   
+        else
+          '1 = 0'
+        end
       elsif value == ['out_of_opened_versions']
-        version_ids = scope.open.visible.all(:conditions => 'effective_date IS NULL').collect(&:id).push(0)
-        # do not care about operator and value - just add a condition if filter "in_open_versions" is enabled
-        close_version_ids = Version.where(project_id: project.id).where('status != ?', "open").pluck(:id)
-        issue_ids = (Issue.where(fixed_version_id: close_version_ids) && Issue.where(fixed_version_id: nil)).pluck(:id)
-        issue_ids.map{ |issue_ids| "(#{TimeEntry.table_name}.issue_id = #{issue_ids})" }
+        version_ids = scope.open.visible.all(:conditions => 'effective_date IS NULL').collect(&:id)
+        if version_ids.present?
+          issue_ids = (Issue.where('fixed_version_id IS NULL OR fixed_version_id=?', version_ids)).pluck(:id)
+          "(#{TimeEntry.table_name}.issue_id IN (#{issue_ids.join(',')}))" 
+        else
+          '1 = 0'
+        end
       end
     end
 
     def sql_for_fixed_version_id_field(field, operator, value)
       if Issue.where(fixed_version_id: value[0].to_i).present?
         issue_ids = Issue.where(fixed_version_id: value[0].to_i).pluck(:id)
-        issue_ids.map{ |issue_ids| "(#{TimeEntry.table_name}.issue_id = #{issue_ids})" }
+        "(#{TimeEntry.table_name}.issue_id IN (#{issue_ids.join(',')}))" 
       else
-        "(#{TimeEntry.table_name}.issue_id IS NULL)"
+        '1 = 0'
       end
     end
   end
