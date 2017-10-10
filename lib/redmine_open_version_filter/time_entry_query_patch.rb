@@ -21,8 +21,12 @@ module TimeEntryQueryPatch
           :order => 1,
           :values => [[l(:in_opened_versions), :in_opened_versions], [l(:out_of_opened_versions), :out_of_opened_versions]],
         })
- 
-      versions = project.shared_versions.all
+
+      if project.present?
+        versions = project.shared_versions.all
+      else
+        versions = Version.all
+      end
 
       add_available_filter "fixed_version_id",
         :name => l('field_fixed_version'),
@@ -39,18 +43,26 @@ module TimeEntryQueryPatch
         scope = scope.where(id: all_shared_version_ids)
       end
       if value == ["in_opened_versions"]
-        version_ids = scope.open.where(project_id: project.id).visible.all(:conditions => 'effective_date IS NOT NULL').collect(&:id)
+        version_ids = scope.open.visible.all(:conditions => 'effective_date IS NOT NULL').collect(&:id)
         if version_ids.present?
           issue_ids = Issue.where(fixed_version_id: version_ids).pluck(:id)
-          "(#{TimeEntry.table_name}.issue_id IN (#{issue_ids.join(',')}))"   
+          if issue_ids.present?
+            "(#{TimeEntry.table_name}.issue_id IN (#{issue_ids.join(',')}))" 
+          else
+            '1 = 0'  
+          end
         else
           '1 = 0'
         end
       elsif value == ['out_of_opened_versions']
         version_ids = scope.open.visible.all(:conditions => 'effective_date IS NULL').collect(&:id)
         if version_ids.present?
-          issue_ids = (Issue.where('fixed_version_id IS NULL OR fixed_version_id=?', version_ids)).pluck(:id)
-          "(#{TimeEntry.table_name}.issue_id IN (#{issue_ids.join(',')}))" 
+          issue_ids = (Issue.where('fixed_version_id IS NULL OR fixed_version_id IN (?)', version_ids)).pluck(:id)
+          if issue_ids.present?
+            "(#{TimeEntry.table_name}.issue_id IN (#{issue_ids.join(',')}))"
+          else
+            '1 = 0'  
+          end
         else
           '1 = 0'
         end
@@ -58,11 +70,35 @@ module TimeEntryQueryPatch
     end
 
     def sql_for_fixed_version_id_field(field, operator, value)
-      if Issue.where(fixed_version_id: value[0].to_i).present?
-        issue_ids = Issue.where(fixed_version_id: value[0].to_i).pluck(:id)
-        "(#{TimeEntry.table_name}.issue_id IN (#{issue_ids.join(',')}))" 
-      else
-        '1 = 0'
+      case operator
+      when "="
+        if Issue.where(fixed_version_id: value[0].to_i).present?
+          issue_ids = Issue.where(fixed_version_id: value[0].to_i).pluck(:id)
+          "(#{TimeEntry.table_name}.issue_id IN (#{issue_ids.join(',')}))" 
+        else
+          '1 = 0'
+        end
+      when "!"
+        issue_ids = Issue.where('fixed_version_id IS NULL OR fixed_version_id != ?', value[0].to_i).pluck(:id)
+        if issue_ids.present?
+          "(#{TimeEntry.table_name}.issue_id IN (#{issue_ids.join(',')}))"
+        else
+          '1 = 0'
+        end
+      when "!*"
+        issue_ids = Issue.where(fixed_version_id: nil).pluck(:id)
+        if issue_ids.present?
+          "(#{TimeEntry.table_name}.issue_id IN (#{issue_ids.join(',')}))"
+        else
+          '1 = 0'
+        end
+      when "*" 
+        issue_ids = Issue.all.pluck(:id) #!!!
+        if issue_ids.present?
+          "(#{TimeEntry.table_name}.issue_id IN (#{issue_ids.join(',')}))"
+        else
+          '1 = 0'
+        end
       end
     end
   end
