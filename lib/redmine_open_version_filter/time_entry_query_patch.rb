@@ -25,7 +25,7 @@ module TimeEntryQueryPatch
       if project.present?
         versions = project.shared_versions.all
       else
-        versions = Version.all
+        versions = all_projects.map { |p| p.shared_versions.open }.flatten.uniq
       end
 
       add_available_filter "fixed_version_id",
@@ -93,7 +93,7 @@ module TimeEntryQueryPatch
           '1 = 0'
         end
       when "*" 
-        issue_ids = Issue.all.pluck(:id) #!!!
+        issue_ids = Issue.all.collect(&:id)
         if issue_ids.present?
           "(#{TimeEntry.table_name}.issue_id IN (#{issue_ids.join(',')}))"
         else
